@@ -1,7 +1,6 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import qrcode from 'qrcode-terminal'
 import { createClient } from '@supabase/supabase-js'
-import { Boom } from '@hapi/boom'
 
 const supabase = createClient(
   'https://ragxduxdwylyjmspzjxbv.supabase.co',
@@ -27,7 +26,8 @@ async function startBot() {
           qrcode.generate(qr, { small: true })
         }
         if(connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode!== DisconnectReason.loggedOut
+            const statusCode = lastDisconnect?.error?.output?.statusCode
+            const shouldReconnect = statusCode!== DisconnectReason.loggedOut
             if(shouldReconnect) startBot()
         } else if(connection === 'open') {
             console.log('✅ BOT SATCOM MASTER LATAM ONLINE')
