@@ -1,7 +1,8 @@
-import fs from 'fs'
-try{ fs.rmSync('auth', {recursive:true, force:true}); console.log('auth borrada') }catch(e){}
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import { createClient } from '@supabase/supabase-js'
+import fs from 'fs'
+try{ fs.rmSync('auth', {recursive:true, force:true}); console.log('auth borrada') }catch(e){}
+import qrcode from 'qrcode-terminal'
 
 const supabase = createClient('https://ragxduxdwylyjmspzjxbv.supabase.co','sb_publishable_94IZwRIbVdQzDrI4KxTtTQ__hte1QQ0')
 const INVITE_CODE = 'IgyfxZYyujL2wbESxiDhO7'
@@ -13,17 +14,14 @@ async function startBot(){
     const sock = makeWASocket({ auth: state, printQRInTerminal: false, browser: ["Ubuntu", "Chrome", "22.04.4"] })
     sock.ev.on('creds.update', saveCreds)
 
-    if(!sock.authState.creds.registered){
-        setTimeout(async ()=>{
-            try{
-                const code = await sock.requestPairingCode('526563235799')
-                console.log(`\n\n============================\nCODIGO: ${code}\n============================\n\n`)
-            }catch(e){ console.log(e.message) }
-        }, 5000)
-    }
-
     sock.ev.on('connection.update', async (u)=>{
-        if(u.connection === 'open'){ console.log('✅ BOT SEMANAL ONLINE'); try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id }catch(e){} }
+        if(u.qr){ console.log('--- ESCANEA ESTE QR ---'); qrcode.generate(u.qr, {small:true}) }
+        if(u.connection === 'open'){
+            console.log('✅ BOT SEMANAL ONLINE');
+            try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id }catch(e){}
+            // BORRA ESTAS 2 LINEAS DESPUES DE VINCULAR
+            try{ fs.rmSync('bot.js.bak',{force:true}) }catch(e){}
+        }
         if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut) startBot()
     })
 
