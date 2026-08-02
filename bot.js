@@ -1,117 +1,158 @@
 import express from 'express';
-const app = express();
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
+
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot Creator Online 24/7 ✅'));
-app.listen(PORT, () => console.log(`Server en puerto ${PORT}`));
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
-import { createClient } from '@supabase/supabase-js'
+const NUMERO_ADMIN = "521XXXXXXXXXX@s.whatsapp.net";
 
-const supabase = createClient('https://ragxduxdwylyjmspzjbv.supabase.co','sb_publishable_94iZwRIbVdQzDrI4KxTtTQ__hte1Q00')
+const app = express();
+app.get('/', (req, res) => res.send('Streamer Hub LATAM GMT-5 Online ✅'));
+app.listen(PORT, () => console.log(`Puerto ${PORT}`));
 
-const PAISES = [
-  { emoji: '🇲🇽', offset: -6 },
-  { emoji: '🇨🇴', offset: -5 },
-  { emoji: '🇦🇷', offset: -3 },
-  { emoji: '🇪🇸', offset: 2 },
-]
+let calendario = [];
+let streamers = [];
 
-function convertirHoras(horaBase){
-  const [h,m] = horaBase.split(':').map(Number)
-  return PAISES.map(p=>{
-    let nh = h + (p.offset - (-5))
-    if(nh < 0) nh+=24
-    if(nh >= 24) nh-=24
-    return `${p.emoji} ${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`
-  }).join(' | ')
+function getSaludoLATAM() {
+  const h = parseInt(new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", hour: "numeric", hour12: false }));
+  if (h >= 5 && h < 12) return "Hola, buenos días ☀️";
+  if (h >= 12 && h < 19) return "Hola, buenas tardes 🌤️";
+  return "Hola, buenas noches 🌙";
 }
 
-async function buscarCreador(texto){
-  const { data } = await supabase.from('creadores').select('*')
-  if(!data) return null
-  const lower = texto.toLowerCase()
-  return data.find(c => lower.includes(c.username.toLowerCase()))
+function getHoraLATAM() {
+  const horaBogota = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", hour: '2-digit', minute: '2-digit', hour12: true });
+  const horaMX = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City", hour: '2-digit', minute: '2-digit', hour12: true });
+  const horaAR = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: '2-digit', minute: '2-digit', hour12: true });
+  const fecha = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", weekday: 'long', day: 'numeric', month: 'long' });
+  return { fecha, detalle: `🇨🇴 BOG/LIM ${horaBogota} | 🇲🇽 MEX ${horaMX} | 🇦🇷 ARG ${horaAR}` };
 }
 
-async function esAdmin(sock, jid, senderId){
-  try{
-    if(!jid.endsWith('@g.us')) return true
-    const metadata = await sock.groupMetadata(jid)
-    const participant = metadata.participants.find(p => p.id === senderId)
-    return participant && (participant.admin === 'admin' || participant.admin === 'superadmin')
-  }catch(e){ return false }
+function esAdmin(remitente) {
+  return remitente === NUMERO_ADMIN;
 }
 
-async function startBot(){
-    const { state, saveCreds } = await useMultiFileAuthState('auth')
-    const sock = makeWASocket({ auth: state, browser: ["Ubuntu", "Chrome", "22.04.4"] })
-    sock.ev.on('creds.update', saveCreds)
-    sock.ev.on('connection.update', async (u)=>{
-        if(u.qr) console.log(`QR: https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(u.qr)}`)
-        if(u.connection === 'open') console.log('✅ BOT ONLINE')
-        if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut) startBot()
-    })
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+  const sock = makeWASocket({ auth: state, printQRInTerminal: false });
+  sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('messages.upsert', async ({messages})=>{
-        const msg = messages[0]; if(!msg.message || msg.key.fromMe) return
-        const jid = msg.key.remoteJid
-        const senderId = msg.key.participant || msg.key.remoteJid
-        const textoRaw = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim()
-        let texto = textoRaw.toLowerCase()
-        if(texto.startsWith('!')) texto = texto.substring(1)
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) console.log(`QR: https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qr)}`);
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode!== DisconnectReason.loggedOut;
+      if (shouldReconnect) startBot();
+    }
+  });
 
-        if(texto === 'ayuda'){
-            await sock.sendMessage(jid, {text: `!calendario\n!agregar LUNES 18:00 satcommaster GP Belgica\n!borrar 1\n!borrar todo (solo admin)`})
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+    const from = msg.key.remoteJid;
+    const sender = msg.key.participant || from;
+    const textoOriginal = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+    const texto = textoOriginal.toLowerCase().trim();
+
+    if (texto.includes('hola') || texto === 'menu' || texto === 'calendario') {
+      const saludo = getSaludoLATAM();
+      const { fecha, detalle } = getHoraLATAM();
+      let lista = calendario.map((e,i) => `${i+1}. ${e}`).join('\n') || "_Sin eventos_";
+
+      await sock.sendMessage(from, {
+        text: `${saludo}
+*Este es el Calendario Creator LATAM*
+
+📍 Zona horaria: *LATINOAMÉRICA GMT-5*
+🌎 Bogotá • Lima • Quito • Panamá
+🗓️ ${fecha}
+⏰ ${detalle}
+
+*📅 Calendario:*
+${lista}`
+      });
+
+      for (const s of streamers) {
+        await sock.sendMessage(from, {
+          text: `*• ${s.nombre} — ${s.juego} •*`,
+          footer: "Calendario Creator LATAM",
+          templateButtons: [
+            { index: 1, urlButton: { displayText: `💜 Twitch - ${s.nombre}`, url: s.twitch } },
+            { index: 2, urlButton: { displayText: `💚 Kick - ${s.nombre}`, url: s.kick } },
+            { index: 3, urlButton: { displayText: `🎵 TikTok`, url: s.tiktok } },
+            { index: 4, urlButton: { displayText: `❤️ YouTube`, url: s.youtube } },
+          ]
+        });
+      }
+    }
+
+    else if (texto === 'emojis' || texto === 'emoji') {
+      await sock.sendMessage(from, {
+        text: `*✨ PACK EMOJIS STREAMER LATAM*
+
+☀️ 🌤️ 🌙 👋 ✨
+💜 Twitch
+💚 Kick
+🎵 TikTok
+❤️ YouTube
+🔴 LIVE
+🎙️ 🎧 🎮
+📅 🗓️ ⏰ 📌 ✅ 🔥 🚀
+🌎 🇲🇽 🇨🇴 🇵🇪 🇦🇷 🇨🇱 🇪🇨 🇵🇦`
+      });
+    }
+
+    else if (texto.startsWith('borrar ')) {
+      if (!esAdmin(sender)) {
+        await sock.sendMessage(from, { text: "❌ *Solo el administrador puede borrar* 👑" });
+        return;
+      }
+
+      if (texto === 'borrar todo' || texto === 'borrar todos') {
+        calendario = [];
+        streamers = [];
+        await sock.sendMessage(from, { text: "🗑️ *TODO BORRADO por administrador* ✅" });
+      } else {
+        const num = parseInt(texto.replace('borrar', '').trim());
+        if (isNaN(num)) {
+          await sock.sendMessage(from, { text: "❌ Usa: borrar 1 o borrar todo" });
+          return;
         }
-
-        if(texto === 'calendario'){
-            const { data, error } = await supabase.from('calendario').select('*').order('created_at')
-            if(error){ await sock.sendMessage(jid, {text:`❌ Error leyendo calendario: ${error.message}`}); return }
-            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 VACIO'}); return }
-            let r='🗓️ *CALENDARIO*\n\n'
-            for(const e of data){
-              const creador = await buscarCreador(e.canal || e.evento || '')
-              let tituloLimpio = e.evento || ''
-              if(creador){ tituloLimpio = tituloLimpio.replace(new RegExp(creador.username, 'gi'), '').trim() }
-              if(tituloLimpio === '') tituloLimpio = 'Directo'
-              r+=`*${data.indexOf(e)+1}.* 📍 *${e.dia}* *${e.hora}* - ${tituloLimpio}\n`
-              if(creador){ r+=` 👤 ${creador.nombre}\n 🟣 ${creador.twitch||''}\n 🎵 ${creador.tiktok||''}\n 🟢 ${creador.kick||''}\n` }
-              r+=` ${convertirHoras(e.hora)}\n\n`
-            }
-            await sock.sendMessage(jid, {text:r})
+        if (num <= calendario.length) {
+          const borrado = calendario.splice(num - 1, 1);
+          await sock.sendMessage(from, { text: `✅ Borrado: ${borrado[0]}` });
+        } else {
+          const idx = num - calendario.length - 1;
+          if (streamers[idx]) {
+            const borrado = streamers.splice(idx, 1);
+            await sock.sendMessage(from, { text: `✅ Streamer borrado: ${borrado[0].nombre}` });
+          }
         }
+      }
+    }
 
-        if(texto.startsWith('agregar ')){
-            const m = textoRaw.match(/!?agregar\s+(?:(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+)?(\d{1,2}:\d{2})\s+(.+)/i)
-            if(!m){ await sock.sendMessage(jid, {text:'❌ Usa:!agregar LUNES 18:00 satcommaster GP Belgica'}); return }
-            let dia = (m[1]||'LUNES').toUpperCase().replace('MIÉRCOLES','MIERCOLES').replace('SÁBADO','SABADO')
-            let eventoCompleto = m[3]
-            const creador = await buscarCreador(eventoCompleto)
-            let canal = creador?.username || eventoCompleto.split(' ')[0]
+    else if (texto === 'ayuda') {
+      await sock.sendMessage(from, {
+        text: `*📖 AYUDA STREAMER HUB LATAM GMT-5*
 
-            // INTENTO DE GUARDADO CON DEBUG
-            const { data, error } = await supabase.from('calendario').insert([{dia, hora: m[2], evento: eventoCompleto, canal, link: creador?.twitch || null}]).select()
-            if(error){
-              await sock.sendMessage(jid, {text:`❌ ERROR AL GUARDAR:\n${error.message}\n\nEsto pasa porque tu tabla calendario no tiene la columna canal o link. Ve a Supabase > SQL y corre el SQL que te mande.`})
-              console.log(error)
-            } else {
-              await sock.sendMessage(jid, {text:`✅ Guardado: ${dia} ${m[2]} - ${eventoCompleto}`})
-            }
-        }
+*hola / menu* — Ver calendario + canales con botones
+*canales* — Ver links
+*emojis* — Pack de emojis
+*ayuda* — Este menú
 
-        if(texto === 'borrar todo'){
-            const admin = await esAdmin(sock, jid, senderId)
-            if(!admin){ await sock.sendMessage(jid, {text:'⛔ Solo admins'}); return }
-            await supabase.from('calendario').delete().neq('id',0)
-            await sock.sendMessage(jid, {text:'🗑️ Borrado todo'})
-        }
-        if(texto.startsWith('borrar ') && texto!== 'borrar todo'){
-            const num = parseInt(texto.replace('borrar','').trim())
-            if(isNaN(num)) return
-            const { data } = await supabase.from('calendario').select('*').order('created_at')
-            if(!data || data.length < num) return
-            await supabase.from('calendario').delete().eq('id', data[num-1].id)
-            await sock.sendMessage(jid, {text:`🗑️ Borrado #${num}`})
-        }
-    })
+*SOLO ADMIN 👑:*
+- borrar 1
+- borrar todo`
+      });
+    }
+
+    else if (texto === 'canales') {
+      let txt = "*🔗 CANALES:*\n";
+      streamers.forEach((s,i) => {
+        txt += `\n${calendario.length+i+1}. *${s.nombre}*\n💜 ${s.twitch}\n💚 ${s.kick}\n🎵 ${s.tiktok}\n❤️ ${s.youtube}\n`;
+      });
+      await sock.sendMessage(from, { text: txt || "_Sin canales_" });
+    }
+  });
 }
-startBot()
+
+startBot();
