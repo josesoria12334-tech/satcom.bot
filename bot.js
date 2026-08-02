@@ -12,7 +12,7 @@ async function startBot(){
     sock.ev.on('creds.update', saveCreds)
 
     if(!sock.authState.creds.registered){
-        setTimeout(async ()=>{ try{ const code = await sock.requestPairingCode('529381256943'); console.log(`CODIGO: ${code}`) }catch(e){} },3000)
+        setTimeout(async ()=>{ try{ const code = await sock.requestPairingCode('526563235799'); console.log(`CODIGO: ${code}`) }catch(e){} },3000)
     }
 
     sock.ev.on('connection.update', async (u)=>{
