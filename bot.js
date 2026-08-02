@@ -3,9 +3,27 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient('https://ragxduxdwylyjmspzjbv.supabase.co','sb_publishable_94iZwRIbVdQzDrI4KxTtTQ__hte1Q00')
 
+// CONFIGURA TUS PAISES AQUI - cambia banderas y offset si quieres
+const PAISES = [
+  { emoji: '🇲🇽', nombre: 'MX', offset: -6 }, // Juarez base
+  { emoji: '🇨🇴', nombre: 'CO', offset: -5 },
+  { emoji: '🇦🇷', nombre: 'AR', offset: -3 },
+  { emoji: '🇪🇸', nombre: 'ES', offset: 2 },
+  { emoji: '🇺🇸', nombre: 'US-ET', offset: -4 },
+]
+
 const INVITE_CODE = 'IgyfxZYyujL2wbESxiDhO7'
 let CHAT_PERMITIDO = null
-const DIAS = ['LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO','DOMINGO']
+
+function convertirHoras(horaBase){
+  const [h,m] = horaBase.split(':').map(Number)
+  return PAISES.map(p=>{
+    let nh = h + (p.offset - (-6)) // base es -6
+    if(nh < 0) nh+=24
+    if(nh >= 24) nh-=24
+    return `${p.emoji} ${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+  }).join(' | ')
+}
 
 async function startBot(){
     const { state, saveCreds } = await useMultiFileAuthState('auth')
@@ -15,7 +33,7 @@ async function startBot(){
         if(u.qr) console.log(`LINK QR: https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(u.qr)}`)
         if(u.connection === 'open'){
             console.log('✅ BOT SEMANAL ONLINE');
-            try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id; console.log('Grupo:', info.id) }catch(e){}
+            try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id }catch(e){}
         }
         if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut) startBot()
     })
@@ -25,53 +43,46 @@ async function startBot(){
         const jid = msg.key.remoteJid
         const textoRaw = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim()
         let texto = textoRaw.toLowerCase()
-        if(texto.startsWith('!')) texto = texto.substring(1) // quita el!
+        if(texto.startsWith('!')) texto = texto.substring(1)
 
         if(CHAT_PERMITIDO && jid!== CHAT_PERMITIDO && jid.endsWith('@g.us')) return
 
-        // --- CALENDARIO ---
         if(texto === 'calendario'){
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            const { data, error } = await supabase.from('calendario').select('*').order('created_at', {ascending: true})
-            if(error){ await sock.sendMessage(jid, {text:`❌ ${error.message}`}); return }
-            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *VACIO*\nUsa:!agregar LUNES 18:00 GP Belgica'}); return }
-            let r='🗓️ *CALENDARIO CREATOR GUILD*\n━━━━━━━━━━━━━━━\n\n'
-            data.forEach((e, i)=>{
-                r+=`*${i+1}.* 📍 ${e.dia} *${e.hora}* - ${e.evento}\n`
+            const { data } = await supabase.from('calendario').select('*').order('created_at')
+            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *VACIO*\nEj:!agregar LUNES 18:00 GP Belgica'}); return }
+            let r='🗓️ *CALENDARIO CREATOR GUILD*\n━━━━━━━━━━━━━━━\n_Horas base Cd. Juárez_\n\n'
+            data.forEach((e,i)=>{
+              r+=`*${i+1}.* 📍 *${e.dia}* *${e.hora}* - ${e.evento}\n ${convertirHoras(e.hora)}\n\n`
             })
-            r+=`\nPara borrar uno:!borrar 2\nPara borrar todo:!borrar todo`
+            r+=`_Borrar:!borrar 2 |!borrar todo_`
             await sock.sendMessage(jid, {text:r})
         }
 
-        // --- AGREGAR ---
         if(texto.startsWith('agregar ')){
             const m = textoRaw.match(/!?agregar\s+(?:(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+)?(\d{1,2}:\d{2})\s+(.+)/i)
-            if(!m){ await sock.sendMessage(jid, {text:'❌ Usa:!agregar LUNES 18:00 GP Belgica'}); return }
+            if(!m) return
             let dia = (m[1]||'LUNES').toUpperCase().replace('MIÉRCOLES','MIERCOLES').replace('SÁBADO','SABADO')
-            const { error } = await supabase.from('calendario').insert([{dia, hora: m[2], evento: m[3]}])
-            if(error){ await sock.sendMessage(jid, {text:`❌ ${error.message}`}); return }
+            await supabase.from('calendario').insert([{dia, hora: m[2], evento: m[3]}])
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            await sock.sendMessage(jid, {text:`✅ Agregado #${dia} ${m[2]} - ${m[3]}`})
+            await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]} - ${m[3]}\n${convertirHoras(m[2])}`})
         }
 
-        // --- BORRAR TODO ---
         if(texto === 'borrar todo'){
-            const { error } = await supabase.from('calendario').delete().neq('id',0)
-            if(error){ await sock.sendMessage(jid, {text:`❌ ${error.message}`}); return }
+            await supabase.from('calendario').delete().neq('id',0)
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            await sock.sendMessage(jid, {text:'🗑️ *Calendario borrado*'})
+            await sock.sendMessage(jid, {text:'🗑️ Borrado todo'})
         }
 
-        // --- BORRAR UNO POR UNO:!borrar 2 ---
         if(texto.startsWith('borrar ') && texto!== 'borrar todo'){
             const num = parseInt(texto.replace('borrar','').trim())
-            if(isNaN(num)){ await sock.sendMessage(jid, {text:'❌ Usa:!borrar 2'}); return }
-            const { data } = await supabase.from('calendario').select('*').order('created_at', {ascending: true})
-            if(!data || data.length < num){ await sock.sendMessage(jid, {text:`❌ No hay #${num}`}); return }
+            if(isNaN(num)) return
+            const { data } = await supabase.from('calendario').select('*').order('created_at')
+            if(!data || data.length < num) return
             const aBorrar = data[num-1]
             await supabase.from('calendario').delete().eq('id', aBorrar.id)
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            await sock.sendMessage(jid, {text:`🗑️ Borrado #${num}: ${aBorrar.dia} ${aBorrar.hora} - ${aBorrar.evento}`})
+            await sock.sendMessage(jid, {text:`🗑️ Borrado #${num}`})
         }
     })
 }
