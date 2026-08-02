@@ -1,4 +1,3 @@
-import fs from 'fs'
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import { createClient } from '@supabase/supabase-js'
 
@@ -17,7 +16,7 @@ async function startBot(){
         }
         if(u.connection === 'open'){
             console.log('✅ BOT SEMANAL ONLINE');
-            try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id; console.log('Grupo:', CHAT_PERMITIDO) }catch(e){ console.log('No pude obtener grupo:', e.message) }
+            try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id; console.log('Grupo:', CHAT_PERMITIDO) }catch(e){ console.log('Error grupo:', e.message) }
         }
         if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut) startBot()
     })
@@ -31,13 +30,12 @@ async function startBot(){
         if(!CHAT_PERMITIDO && jid.endsWith('@g.us')) CHAT_PERMITIDO = jid
         if(CHAT_PERMITIDO && jid!== CHAT_PERMITIDO) return
 
-        console.log(`Mensaje recibido: ${textoRaw} en ${jid}`)
+        console.log(`Mensaje: ${textoRaw}`)
 
         if(texto === 'calendario'){
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
             const { data, error } = await supabase.from('calendario').select('*').order('hora')
-            console.log('Calendario data:', data, 'error:', error)
-            if(error){ await sock.sendMessage(jid, {text:`Error Supabase: ${error.message}`}); return }
+            if(error){ await sock.sendMessage(jid, {text:`Error: ${error.message}`}); return }
             if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *CALENDARIO SEMANAL*\n\n😴 Vacío\n✏️ Ej: `agregar LUNES 18:00 GP Belgica`'}); return }
             let r='🗓️ *CALENDARIO CREATOR GUILD - SEMANA*\n━━━━━━━━━━━━━━━\n\n'
             for(const d of DIAS){ const ev = data.filter(x=>x.dia===d); if(ev.length>0){ r+=`📍 *${d}*\n`; ev.forEach(e=>{ r+=` 🔹 *${e.hora}* - ${e.evento}\n` }) ; r+=`\n` } }
@@ -45,26 +43,23 @@ async function startBot(){
         }
         if(texto.startsWith('agregar ')){
             const m = textoRaw.match(/agregar\s+(?:(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+)?(\d{1,2}:\d{2})\s+(.+)/i)
-            if(!m){ await sock.sendMessage(jid, {text:'❌ Formato: `agregar LUNES 18:00 GP Belgica`'}); return }
+            if(!m){ await sock.sendMessage(jid, {text:'❌ Usa: `agregar LUNES 18:00 GP Belgica`'}); return }
             let dia = (m[1]||'LUNES').toUpperCase().replace('MIÉRCOLES','MIERCOLES').replace('SÁBADO','SABADO')
-            console.log(`Intentando guardar: ${dia} ${m[2]} ${m[3]}`)
-            const { data, error } = await supabase.from('calendario').insert([{ dia, hora: m[2], evento: m[3], agregado_por: nombre }]).select()
+            const { error } = await supabase.from('calendario').insert([{ dia, hora: m[2], evento: m[3], agregado_por: nombre }])
             if(error){
                 console.log('Error insert:', error)
-                await sock.sendMessage(jid, {text:`❌ No guardó: ${error.message}\n\nVe a Supabase > SQL Editor y corre: ALTER TABLE calendario DISABLE ROW LEVEL SECURITY;`})
+                await sock.sendMessage(jid, {text:`❌ No guardó: ${error.message}`})
                 return
             }
-            console.log('Guardado OK:', data)
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
             const sent = await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]} - ${m[3]}`})
             setTimeout(()=> sock.sendMessage(jid, {delete: sent.key}).catch(()=>{}), 8000)
         }
         if(texto.startsWith('borrar todo')){
-            const { error } = await supabase.from('calendario').delete().neq('id',0)
-            if(error) await sock.sendMessage(jid, {text:`Error borrando: ${error.message}`})
-            else { try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}; await sock.sendMessage(jid, {text:'🗑️ Calendario borrado'}) }
+            await supabase.from('calendario').delete().neq('id',0)
+            try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
         }
-        }catch(e){ console.log('Error general:', e) }
+        }catch(e){ console.log('Error:', e) }
     })
 }
 startBot()
