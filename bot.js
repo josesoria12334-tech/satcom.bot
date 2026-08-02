@@ -14,15 +14,17 @@ async function startBot(){
     sock.ev.on('creds.update', saveCreds)
 
     if(!sock.authState.creds.registered){
-        setTimeout(async ()=>{ try{ const code = await sock.requestPairingCode('526563235799'); console.log(`CODIGO: ${code}`) }catch(e){} },3000)
+        setTimeout(async ()=>{
+            try{
+                const code = await sock.requestPairingCode('526563235799')
+                console.log(`\n\n============================\nCODIGO: ${code}\n============================\n\n`)
+            }catch(e){ console.log(e.message) }
+        }, 5000)
     }
 
     sock.ev.on('connection.update', async (u)=>{
-        if(u.connection === 'open'){
-            console.log('✅ BOT SEMANAL ONLINE')
-            try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id }catch(e){}
-        }
-        if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) startBot()
+        if(u.connection === 'open'){ console.log('✅ BOT SEMANAL ONLINE'); try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id }catch(e){} }
+        if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut) startBot()
     })
 
     sock.ev.on('messages.upsert', async ({messages})=>{
@@ -30,46 +32,27 @@ async function startBot(){
         const jid = msg.key.remoteJid; const nombre = msg.pushName || 'Alguien'
         const textoRaw = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim()
         const texto = textoRaw.toLowerCase()
-
         if(!CHAT_PERMITIDO && jid.endsWith('@g.us')) CHAT_PERMITIDO = jid
-        if(CHAT_PERMITIDO && jid !== CHAT_PERMITIDO) return
+        if(CHAT_PERMITIDO && jid!== CHAT_PERMITIDO) return
 
         if(texto === 'calendario'){
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
             const { data } = await supabase.from('calendario').select('*').order('hora')
-            if(!data || data.length===0){
-                await sock.sendMessage(jid, {text:'📅 *CALENDARIO CREATOR GUILD - SEMANAL*\n━━━━━━━━━━━━━━━\n\n😴 *Vacío*\n\n✏️ Ej: `agregar LUNES 18:00 GP Belgica`'}); return
-            }
+            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *CALENDARIO SEMANAL*\n\n😴 Vacío\n✏️ Ej: `agregar LUNES 18:00 GP Belgica`'}); return }
             let r='🗓️ *CALENDARIO CREATOR GUILD - SEMANA*\n━━━━━━━━━━━━━━━\n\n'
-            for(const d of DIAS){
-                const ev = data.filter(x=>x.dia===d)
-                if(ev.length>0){
-                    r+=`📍 *${d}*\n`
-                    ev.forEach(e=>{ r+=`  🔹 *${e.hora}* - ${e.evento}\n  👤 _por ${e.agregado_por||'alguien'}_\n` })
-                    r+=`\n`
-                }
-            }
-            r+='━━━━━━━━━━━━━━━\n✏️ `agregar DIA HORA EVENTO`\n🗑️ `borrar todo`'
+            for(const d of DIAS){ const ev = data.filter(x=>x.dia===d); if(ev.length>0){ r+=`📍 *${d}*\n`; ev.forEach(e=>{ r+=` 🔹 *${e.hora}* - ${e.evento}\n` }) ; r+=`\n` } }
             await sock.sendMessage(jid, {text:r})
         }
-
         if(texto.startsWith('agregar ')){
             const m = textoRaw.match(/agregar\s+(?:(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+)?(\d{1,2}:\d{2})\s+(.+)/i)
             if(!m) return
             let dia = (m[1]||'LUNES').toUpperCase().replace('MIÉRCOLES','MIERCOLES').replace('SÁBADO','SABADO')
-            const { error } = await supabase.from('calendario').insert([{ dia, hora: m[2], evento: m[3], agregado_por: nombre }])
-            if(error){ console.log(error.message); return }
+            await supabase.from('calendario').insert([{ dia, hora: m[2], evento: m[3], agregado_por: nombre }])
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            const sent = await sock.sendMessage(jid, {text:`✅ *¡Agregado!*\n📅 ${dia} 🕒 ${m[2]}\n📌 ${m[3]}\n👤 Por: ${nombre}\n\n_Se borra en 5s_`})
+            const sent = await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]} - ${m[3]}`})
             setTimeout(()=> sock.sendMessage(jid, {delete: sent.key}).catch(()=>{}), 5000)
         }
-
-        if(texto.startsWith('borrar todo')){
-            await supabase.from('calendario').delete().neq('id',0)
-            try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            const sent = await sock.sendMessage(jid, {text:`🗑️ *Semana reiniciada por ${nombre}*`})
-            setTimeout(()=> sock.sendMessage(jid, {delete: sent.key}).catch(()=>{}), 5000)
-        }
+        if(texto.startsWith('borrar todo')){ await supabase.from('calendario').delete().neq('id',0); try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){} }
     })
 }
 startBot()
