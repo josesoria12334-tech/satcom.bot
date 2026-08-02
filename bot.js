@@ -1,3 +1,5 @@
+import fs from 'fs'
+try{ fs.rmSync('auth', {recursive:true, force:true}); console.log('auth borrada') }catch(e){}
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import { createClient } from '@supabase/supabase-js'
 
