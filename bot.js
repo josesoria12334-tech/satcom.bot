@@ -5,25 +5,24 @@ const PORT = process.env.PORT || 3000;
 const NUMERO_ADMIN = "521XXXXXXXXXX@s.whatsapp.net";
 
 const app = express();
-app.get('/', (req, res) => res.send('Streamer Hub LATAM GMT-5 Online ✅'));
+app.get('/', (req, res) => res.send('Streamer Hub LATAM GMT-5 ✅'));
 app.listen(PORT, () => console.log(`Puerto ${PORT}`));
 
-let calendario = [];
-let streamers = [];
+let calendario = []; // {id, texto, owner}
+let streamers = []; // {nombre, juego, twitch, kick, tiktok, youtube, owner}
+let contador = 1;
 
 function getSaludoLATAM() {
   const h = parseInt(new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", hour: "numeric", hour12: false }));
-  if (h >= 5 && h < 12) return "Hola, buenos días ☀️";
-  if (h >= 12 && h < 19) return "Hola, buenas tardes 🌤️";
-  return "Hola, buenas noches 🌙";
+  if (h >= 5 && h < 12) return "☀️ Hola, buenos días";
+  if (h >= 12 && h < 19) return "🌤️ Hola, buenas tardes";
+  return "🌙 Hola, buenas noches";
 }
 
 function getHoraLATAM() {
-  const horaBogota = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", hour: '2-digit', minute: '2-digit', hour12: true });
-  const horaMX = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City", hour: '2-digit', minute: '2-digit', hour12: true });
-  const horaAR = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: '2-digit', minute: '2-digit', hour12: true });
+  const hora = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", hour: '2-digit', minute: '2-digit', hour12: true });
   const fecha = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", weekday: 'long', day: 'numeric', month: 'long' });
-  return { fecha, detalle: `🇨🇴 BOG ${horaBogota} | 🇲🇽 MEX ${horaMX} | 🇦🇷 ARG ${horaAR}` };
+  return { fecha, hora };
 }
 
 function esAdmin(remitente) {
@@ -40,10 +39,8 @@ async function startBot() {
     if (qr) console.log(`QR: https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qr)}`);
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = statusCode!== DisconnectReason.loggedOut;
-      if (shouldReconnect) startBot();
+      if (statusCode!== DisconnectReason.loggedOut) startBot();
     }
-    if (connection === 'open') console.log('✅ BOT ONLINE LATAM');
   });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -54,31 +51,34 @@ async function startBot() {
     const textoOriginal = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
     const texto = textoOriginal.toLowerCase().trim();
 
-    if (texto.includes('hola') || texto === 'menu' || texto === 'calendario' || texto.includes('streamer')) {
+    // HOLA / MENU / CALENDARIO
+    if (texto.includes('hola') || texto === 'menu' || texto === 'calendario') {
       const saludo = getSaludoLATAM();
-      const { fecha, detalle } = getHoraLATAM();
-      let lista = calendario.map((e,i) => `${i+1}. ${e}`).join('\n') || "_Sin eventos_";
+      const { fecha, hora } = getHoraLATAM();
+      let listaCal = calendario.map((e) => `${e.id}. 📌 ${e.texto}`).join('\n') || "✨ _Sin eventos aún_";
 
       await sock.sendMessage(from, {
-        text: `${saludo}
-*Este es el Calendario Creator LATAM*
+        text: `${saludo} 👋
 
-📍 Zona horaria: *LATINOAMÉRICA GMT-5*
+💜 *Este es el Calendario Creator LATAM* 💚
+📍 *Zona horaria:* LATINOAMÉRICA GMT-5
 🌎 Bogotá • Lima • Quito • Panamá
-🗓️ ${fecha}
-⏰ ${detalle}
+🗓️ ${fecha} • ⏰ ${hora}
 
-*📅 Calendario:*
-${lista}`
+📅 *Próximos Streams:*
+${listaCal}
+
+🔗 Escribe *canales* para ver los canales
+📖 Escribe *ayuda*`
       });
 
       for (const s of streamers) {
         await sock.sendMessage(from, {
-          text: `*• ${s.nombre} — ${s.juego} •*`,
-          footer: "Calendario Creator LATAM",
+          text: `🔴 *• ${s.nombre} — ${s.juego} •* 🎮`,
+          footer: "✨ Calendario Creator LATAM 🌎",
           templateButtons: [
-            { index: 1, urlButton: { displayText: `💜 Twitch - ${s.nombre}`, url: s.twitch } },
-            { index: 2, urlButton: { displayText: `💚 Kick - ${s.nombre}`, url: s.kick } },
+            { index: 1, urlButton: { displayText: `💜 Twitch • ${s.nombre}`, url: s.twitch } },
+            { index: 2, urlButton: { displayText: `💚 Kick • ${s.nombre}`, url: s.kick } },
             { index: 3, urlButton: { displayText: `🎵 TikTok`, url: s.tiktok } },
             { index: 4, urlButton: { displayText: `❤️ YouTube`, url: s.youtube } },
           ]
@@ -86,67 +86,109 @@ ${lista}`
       }
     }
 
-    else if (texto === 'emojis' || texto === 'emoji') {
-      await sock.sendMessage(from, {
-        text: `*✨ PACK EMOJIS STREAMER LATAM*
-
-☀️ 🌤️ 🌙 👋 ✨
-💜 Twitch
-💚 Kick
-🎵 TikTok
-❤️ YouTube
-🔴 LIVE
-🎙️ 🎧 🎮
-📅 🗓️ ⏰ 📌 ✅ 🔥 🚀
-🌎 🇲🇽 🇨🇴 🇵🇪 🇦🇷 🇨🇱 🇪🇨 🇵🇦`
-      });
+    // AGREGAR EVENTO
+    else if (texto.startsWith('agregar ')) {
+      if (texto.startsWith('agregar canal ')) {
+        const partes = textoOriginal.split(' ');
+        if (partes.length < 7) {
+          await sock.sendMessage(from, { text: "❌ Usa: agregar canal NOMBRE JUEGO LINK_TWITCH LINK_KICK LINK_TIKTOK LINK_YOUTUBE\nEjemplo: agregar canal LUNA Valorant https://twitch.tv/luna https://kick.com/luna https://tiktok.com/@luna https://youtube.com/@luna" });
+          return;
+        }
+        const nombre = partes[2].toUpperCase();
+        const juego = partes[3];
+        streamers.push({
+          nombre, juego,
+          twitch: partes[4],
+          kick: partes[5],
+          tiktok: partes[6],
+          youtube: partes[7],
+          owner: sender,
+          id: contador++
+        });
+        await sock.sendMessage(from, { text: `✅ 💜 Canal *${nombre}* agregado con estilo ✨\nAhora aparece con botones 🔗` });
+      } else {
+        const contenido = textoOriginal.substring(8).trim();
+        if (!contenido) {
+          await sock.sendMessage(from, { text: "❌ Escribe que quieres agregar. Ej: agregar Stream IRL mañana 8pm" });
+          return;
+        }
+        calendario.push({ id: contador++, texto: contenido, owner: sender });
+        await sock.sendMessage(from, { text: `✅ 📌 Agregado: *${contenido}* ✨\n🆔 ID: ${contador-1}` });
+      }
     }
 
+    // BORRAR - CADA UNO BORRA LO SUYO, ADMIN BORRA TODO
     else if (texto.startsWith('borrar ')) {
-      if (!esAdmin(sender)) {
-        await sock.sendMessage(from, { text: "❌ *Solo el administrador puede borrar* 👑" });
-        return;
-      }
-      if (texto === 'borrar todo' || texto === 'borrar todos') {
+      if (texto === 'borrar todo') {
+        if (!esAdmin(sender)) {
+          await sock.sendMessage(from, { text: "❌ 👑 Solo el administrador puede usar *borrar todo*" });
+          return;
+        }
         calendario = [];
         streamers = [];
-        await sock.sendMessage(from, { text: "🗑️ *TODO BORRADO por administrador* ✅" });
+        contador = 1;
+        await sock.sendMessage(from, { text: "🗑️ ✅ *Todo borrado por admin* 👑 ✨" });
       } else {
         const num = parseInt(texto.replace('borrar', '').trim());
-        if (!isNaN(num) && num <= calendario.length) {
-          const borrado = calendario.splice(num - 1, 1);
-          await sock.sendMessage(from, { text: `✅ Borrado: ${borrado[0]}` });
-        } else {
-          const idx = num - calendario.length - 1;
-          if (streamers[idx]) {
-            const borrado = streamers.splice(idx, 1);
-            await sock.sendMessage(from, { text: `✅ Streamer borrado: ${borrado[0].nombre}` });
-          }
+        if (isNaN(num)) {
+          await sock.sendMessage(from, { text: "❌ Usa: borrar 1 o borrar todo" });
+          return;
         }
+        let encontrado = calendario.find(e => e.id === num);
+        if (encontrado) {
+          if (encontrado.owner!== sender &&!esAdmin(sender)) {
+            await sock.sendMessage(from, { text: "❌ 🔒 Solo puedes borrar lo que tú agregaste. Este evento es de otro usuario." });
+            return;
+          }
+          calendario = calendario.filter(e => e.id!== num);
+          await sock.sendMessage(from, { text: `✅ 🗑️ Borrado: ${encontrado.texto}` });
+          return;
+        }
+        let encontradoS = streamers.find(e => e.id === num);
+        if (encontradoS) {
+          if (encontradoS.owner!== sender &&!esAdmin(sender)) {
+            await sock.sendMessage(from, { text: "❌ 🔒 Solo puedes borrar el canal que tú agregaste." });
+            return;
+          }
+          streamers = streamers.filter(e => e.id!== num);
+          await sock.sendMessage(from, { text: `✅ 🗑️ Canal borrado: ${encontradoS.nombre}` });
+          return;
+        }
+        await sock.sendMessage(from, { text: `❌ No existe el ID ${num}` });
       }
+    }
+
+    else if (texto === 'canales') {
+      if (streamers.length === 0 && calendario.length === 0) {
+        await sock.sendMessage(from, { text: "✨ _Sin canales aún_ 🔗\nUsa: agregar canal NOMBRE JUEGO LINKS" });
+        return;
+      }
+      let txt = "🔗 *CANALES OFICIALES* 🌎\n";
+      streamers.forEach((s) => {
+        txt += `\n🆔 ${s.id} • 💜 *${s.nombre}* 🎮 ${s.juego}\n`;
+      });
+      await sock.sendMessage(from, { text: txt });
     }
 
     else if (texto === 'ayuda') {
       await sock.sendMessage(from, {
-        text: `*📖 AYUDA STREAMER HUB LATAM GMT-5*
+        text: `📖 *AYUDA ✨ STREAMER HUB LATAM* 🌎
 
-*hola / menu* — Ver calendario + canales con botones
-*canales* — Ver links
-*emojis* — Pack de emojis
-*ayuda* — Este menú
+💜 *Comandos:*
+• 🌤️ *hola / menu* — Ver calendario estético + botones clickeables
+• 🔗 *canales* — Ver lista de IDs y nombres
+• 📌 *agregar* — Agregar evento
+   Ej: agregar Torneo el viernes 8pm
+• 🎮 *agregar canal* — Agregar streamer con 4 redes
+   Ej: agregar canal LUNA Valorant https://twitch.tv/luna https://kick.com/luna https://tiktok.com/@luna https://youtube.com/@luna
 
-*SOLO ADMIN 👑:*
-- borrar 1
-- borrar todo`
+🗑️ *Borrado:*
+• *borrar 1* — Borra lo que TÚ agregaste con ID 1 🔒
+• *borrar todo* — Solo admin 👑 borra todo
+
+📍 GMT-5 Bogotá/Lima/Quito
+✨ Todo con estética de emojis`
       });
-    }
-
-    else if (texto === 'canales') {
-      let txt = "*🔗 CANALES:*\n";
-      streamers.forEach((s) => {
-        txt += `\n*${s.nombre}*\n💜 ${s.twitch}\n💚 ${s.kick}\n🎵 ${s.tiktok}\n❤️ ${s.youtube}\n`;
-      });
-      await sock.sendMessage(from, { text: txt || "_Sin canales_" });
     }
   });
 }
