@@ -1,16 +1,13 @@
 {
-  "name": "bot-creator",
+  "name": "streamer-hub-latam",
   "type": "module",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
-  "engines": {
-    "node": "20.19.0"
-  },
   "dependencies": {
     "express": "^4.18.2",
-    "@whiskeysockets/baileys": "^6.7.8",
-    "@supabase/supabase-js": "^2.39.0"
+    "@whiskeysockets/baileys": "^6.7.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
