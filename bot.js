@@ -22,7 +22,7 @@ async function startBot(){
 
     // --- 1. CODIGO DE 8 DIGITOS EN VEZ DE QR ---
     if(!sock.authState.creds.registered){
-        const phoneNumber = '529381256943' // Tu numero sin + 
+        const phoneNumber = '526563235799' // Tu numero sin + 
         setTimeout(async ()=>{
             try{
                 const code = await sock.requestPairingCode(phoneNumber)
