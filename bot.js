@@ -6,9 +6,7 @@ const supabase = createClient('https://ragxduxdwylyjmspzjbv.supabase.co','sb_pub
 const PAISES = [
   { emoji: '🇲🇽', offset: -6 },
   { emoji: '🇨🇴', offset: -5 },
-  { emoji: '🇵🇪', offset: -5 },
   { emoji: '🇦🇷', offset: -3 },
-  { emoji: '🇨🇱', offset: -4 },
   { emoji: '🇪🇸', offset: 2 },
 ]
 
@@ -25,12 +23,11 @@ function convertirHoras(horaBase){
   }).join(' | ')
 }
 
-function extraerCanal(link){
-  try{
-    if(!link) return null
-    const match = link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/i)
-    return match? match[1] : null
-  }catch(e){ return null }
+async function buscarCreador(texto){
+  const { data } = await supabase.from('creadores').select('*')
+  if(!data) return null
+  const lower = texto.toLowerCase()
+  return data.find(c => lower.includes(c.username.toLowerCase()) || (c.nombre && lower.includes(c.nombre.toLowerCase())))
 }
 
 async function startBot(){
@@ -54,14 +51,31 @@ async function startBot(){
         if(texto === 'calendario'){
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
             const { data } = await supabase.from('calendario').select('*').order('created_at')
-            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *VACIO*\nEj:!agregar LUNES 18:00 GP Belgica https://twitch.tv/ibai'}); return }
-            let r='🗓️ *CALENDARIO CREATOR GUILD*\n🕐 *Hora base LATAM*\n━━━━━━━━━━━━━━━\n\n'
-            data.forEach((e,i)=>{
-              r+=`*${i+1}.* 📍 *${e.dia}* *${e.hora}* - ${e.evento}\n`
-              if(e.canal) r+=` 🟣 @${e.canal} - ${e.link}\n`
-              else if(e.link) r+=` 🔗 ${e.link}\n`
+            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *VACIO*\nEj:!agregar LUNES 18:00 satcommaster GP Belgica'}); return }
+
+            let r='🗓️ *CALENDARIO CREATOR GUILD*\n🕐 *Hora LATAM*\n━━━━━━━━━━━━━━━\n\n'
+            for(const e of data){
+              const creador = await buscarCreador(e.canal || e.evento)
+
+              let tituloLimpio = e.evento
+              if(creador){
+                tituloLimpio = tituloLimpio.replace(new RegExp(creador.username, 'gi'), '')
+                if(creador.nombre) tituloLimpio = tituloLimpio.replace(new RegExp(creador.nombre, 'gi'), '')
+                tituloLimpio = tituloLimpio.trim().replace(/\s{2,}/g, ' ')
+              }
+              if(tituloLimpio === '') tituloLimpio = 'Directo'
+
+              r+=`*${data.indexOf(e)+1}.* 📍 *${e.dia}* *${e.hora}* - ${tituloLimpio}\n`
+              if(creador){
+                r+=` 👤 ${creador.nombre}\n`
+                if(creador.twitch) r+=` 🟣 ${creador.twitch}\n`
+                if(creador.tiktok) r+=` 🎵 TikTok: ${creador.tiktok}\n`
+                if(creador.kick) r+=` 🟢 Kick: ${creador.kick}\n`
+              } else if(e.link){
+                r+=` 🔗 ${e.link}\n`
+              }
               r+=` ${convertirHoras(e.hora)}\n\n`
-            })
+            }
             await sock.sendMessage(jid, {text:r})
         }
 
@@ -70,17 +84,18 @@ async function startBot(){
             if(!m) return
             let dia = (m[1]||'LUNES').toUpperCase().replace('MIÉRCOLES','MIERCOLES').replace('SÁBADO','SABADO')
             let eventoCompleto = m[3]
-            let link = null, canal = null
+            const creador = await buscarCreador(eventoCompleto)
+            let link = creador?.twitch || null
+            let canal = creador?.username || eventoCompleto.split(' ')[0]
             const urlMatch = eventoCompleto.match(/(https?:\/\/[^\s]+|twitch\.tv\/[^\s]+)/i)
             if(urlMatch){
               link = urlMatch[0]
               if(!link.startsWith('http')) link = 'https://' + link
-              canal = extraerCanal(link)
               eventoCompleto = eventoCompleto.replace(urlMatch[0], '').trim()
             }
             await supabase.from('calendario').insert([{dia, hora: m[2], evento: eventoCompleto, link, canal}])
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]} LATAM - ${eventoCompleto}${canal?`\n🟣 @${canal}`:''}`})
+            await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]} LATAM - ${eventoCompleto}`})
         }
 
         if(texto === 'borrar todo'){
