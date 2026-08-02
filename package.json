@@ -1,14 +1,8 @@
 {
-  "name": "satcom-bot",
-  "version": "1.0.0",
-  "main": "bot.js",
+  "name": "bot-creator",
   "type": "module",
-  "scripts": {
-    "start": "node bot.js"
-  },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.8",
-    "qrcode-terminal": "^0.12.0",
     "@supabase/supabase-js": "^2.39.0"
   }
 }
