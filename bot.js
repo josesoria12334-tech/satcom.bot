@@ -1,3 +1,8 @@
+import express from 'express';
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Bot Creator Online 24/7 ✅'));
+app.listen(PORT, () => console.log(`Server en puerto ${PORT}`));
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
 import { createClient } from '@supabase/supabase-js'
 
