@@ -1,6 +1,5 @@
 import express from 'express';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
-import { Boom } from '@hapi/boom';
 
 const PORT = process.env.PORT || 3000;
 const NUMERO_ADMIN = "521XXXXXXXXXX@s.whatsapp.net";
@@ -24,7 +23,7 @@ function getHoraLATAM() {
   const horaMX = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City", hour: '2-digit', minute: '2-digit', hour12: true });
   const horaAR = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: '2-digit', minute: '2-digit', hour12: true });
   const fecha = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", weekday: 'long', day: 'numeric', month: 'long' });
-  return { fecha, detalle: `🇨🇴 BOG/LIM ${horaBogota} | 🇲🇽 MEX ${horaMX} | 🇦🇷 ARG ${horaAR}` };
+  return { fecha, detalle: `🇨🇴 BOG ${horaBogota} | 🇲🇽 MEX ${horaMX} | 🇦🇷 ARG ${horaAR}` };
 }
 
 function esAdmin(remitente) {
@@ -40,9 +39,11 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
     if (qr) console.log(`QR: https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qr)}`);
     if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode!== DisconnectReason.loggedOut;
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode!== DisconnectReason.loggedOut;
       if (shouldReconnect) startBot();
     }
+    if (connection === 'open') console.log('✅ BOT ONLINE LATAM');
   });
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
@@ -53,7 +54,7 @@ async function startBot() {
     const textoOriginal = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
     const texto = textoOriginal.toLowerCase().trim();
 
-    if (texto.includes('hola') || texto === 'menu' || texto === 'calendario') {
+    if (texto.includes('hola') || texto === 'menu' || texto === 'calendario' || texto.includes('streamer')) {
       const saludo = getSaludoLATAM();
       const { fecha, detalle } = getHoraLATAM();
       let lista = calendario.map((e,i) => `${i+1}. ${e}`).join('\n') || "_Sin eventos_";
@@ -106,18 +107,13 @@ ${lista}`
         await sock.sendMessage(from, { text: "❌ *Solo el administrador puede borrar* 👑" });
         return;
       }
-
       if (texto === 'borrar todo' || texto === 'borrar todos') {
         calendario = [];
         streamers = [];
         await sock.sendMessage(from, { text: "🗑️ *TODO BORRADO por administrador* ✅" });
       } else {
         const num = parseInt(texto.replace('borrar', '').trim());
-        if (isNaN(num)) {
-          await sock.sendMessage(from, { text: "❌ Usa: borrar 1 o borrar todo" });
-          return;
-        }
-        if (num <= calendario.length) {
+        if (!isNaN(num) && num <= calendario.length) {
           const borrado = calendario.splice(num - 1, 1);
           await sock.sendMessage(from, { text: `✅ Borrado: ${borrado[0]}` });
         } else {
@@ -147,8 +143,8 @@ ${lista}`
 
     else if (texto === 'canales') {
       let txt = "*🔗 CANALES:*\n";
-      streamers.forEach((s,i) => {
-        txt += `\n${calendario.length+i+1}. *${s.nombre}*\n💜 ${s.twitch}\n💚 ${s.kick}\n🎵 ${s.tiktok}\n❤️ ${s.youtube}\n`;
+      streamers.forEach((s) => {
+        txt += `\n*${s.nombre}*\n💜 ${s.twitch}\n💚 ${s.kick}\n🎵 ${s.tiktok}\n❤️ ${s.youtube}\n`;
       });
       await sock.sendMessage(from, { text: txt || "_Sin canales_" });
     }
