@@ -30,6 +30,32 @@ async function buscarCreador(texto){
   return data.find(c => lower.includes(c.username.toLowerCase()) || (c.nombre && lower.includes(c.nombre.toLowerCase())))
 }
 
+async function esAdmin(sock, jid, senderId){
+  try{
+    if(!jid.endsWith('@g.us')) return true // en privado todos son admin
+    const metadata = await sock.groupMetadata(jid)
+    const participant = metadata.participants.find(p => p.id === senderId)
+    return participant && (participant.admin === 'admin' || participant.admin === 'superadmin')
+  }catch(e){ return false }
+}
+
+const TEXTO_AYUDA = `📚 *COMO USAR EL BOT - CREATOR GUILD*
+━━━━━━━━━━━━━━━
+
+*1️⃣ VER CALENDARIO*
+!calendario
+
+*2️⃣ AGREGAR EVENTO*
+!agregar DIA HORA NOMBRE_CREADOR TITULO
+Ej:!agregar LUNES 18:00 satcommaster GP Belgica
+
+*3️⃣ BORRAR UN EVENTO*
+!borrar 1
+
+*4️⃣ BORRAR TODO* (Solo Admins)
+!borrar todo
+`
+
 async function startBot(){
     const { state, saveCreds } = await useMultiFileAuthState('auth')
     const sock = makeWASocket({ auth: state, browser: ["Ubuntu", "Chrome", "22.04.4"] })
@@ -43,20 +69,24 @@ async function startBot(){
     sock.ev.on('messages.upsert', async ({messages})=>{
         const msg = messages[0]; if(!msg.message || msg.key.fromMe) return
         const jid = msg.key.remoteJid
+        const senderId = msg.key.participant || msg.key.remoteJid
         const textoRaw = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').trim()
         let texto = textoRaw.toLowerCase()
         if(texto.startsWith('!')) texto = texto.substring(1)
         if(CHAT_PERMITIDO && jid!== CHAT_PERMITIDO && jid.endsWith('@g.us')) return
 
+        if(['ayuda','help','comandos','instrucciones','tutorial'].includes(texto)){
+            try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
+            await sock.sendMessage(jid, {text: TEXTO_AYUDA})
+        }
+
         if(texto === 'calendario'){
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
             const { data } = await supabase.from('calendario').select('*').order('created_at')
-            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *VACIO*\nEj:!agregar LUNES 18:00 satcommaster GP Belgica'}); return }
-
+            if(!data || data.length===0){ await sock.sendMessage(jid, {text:'📅 *VACIO*\nUsa!ayuda'}); return }
             let r='🗓️ *CALENDARIO CREATOR GUILD*\n🕐 *Hora LATAM*\n━━━━━━━━━━━━━━━\n\n'
             for(const e of data){
               const creador = await buscarCreador(e.canal || e.evento)
-
               let tituloLimpio = e.evento
               if(creador){
                 tituloLimpio = tituloLimpio.replace(new RegExp(creador.username, 'gi'), '')
@@ -64,13 +94,12 @@ async function startBot(){
                 tituloLimpio = tituloLimpio.trim().replace(/\s{2,}/g, ' ')
               }
               if(tituloLimpio === '') tituloLimpio = 'Directo'
-
               r+=`*${data.indexOf(e)+1}.* 📍 *${e.dia}* *${e.hora}* - ${tituloLimpio}\n`
               if(creador){
                 r+=` 👤 ${creador.nombre}\n`
                 if(creador.twitch) r+=` 🟣 ${creador.twitch}\n`
-                if(creador.tiktok) r+=` 🎵 TikTok: ${creador.tiktok}\n`
-                if(creador.kick) r+=` 🟢 Kick: ${creador.kick}\n`
+                if(creador.tiktok) r+=` 🎵 ${creador.tiktok}\n`
+                if(creador.kick) r+=` 🟢 ${creador.kick}\n`
               } else if(e.link){
                 r+=` 🔗 ${e.link}\n`
               }
@@ -81,28 +110,28 @@ async function startBot(){
 
         if(texto.startsWith('agregar ')){
             const m = textoRaw.match(/!?agregar\s+(?:(lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+)?(\d{1,2}:\d{2})\s+(.+)/i)
-            if(!m) return
+            if(!m){ await sock.sendMessage(jid, {text:'❌ Usa:!agregar LUNES 18:00 satcommaster GP Belgica'}); return }
             let dia = (m[1]||'LUNES').toUpperCase().replace('MIÉRCOLES','MIERCOLES').replace('SÁBADO','SABADO')
             let eventoCompleto = m[3]
             const creador = await buscarCreador(eventoCompleto)
             let link = creador?.twitch || null
             let canal = creador?.username || eventoCompleto.split(' ')[0]
-            const urlMatch = eventoCompleto.match(/(https?:\/\/[^\s]+|twitch\.tv\/[^\s]+)/i)
-            if(urlMatch){
-              link = urlMatch[0]
-              if(!link.startsWith('http')) link = 'https://' + link
-              eventoCompleto = eventoCompleto.replace(urlMatch[0], '').trim()
-            }
             await supabase.from('calendario').insert([{dia, hora: m[2], evento: eventoCompleto, link, canal}])
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]} LATAM - ${eventoCompleto}`})
+            await sock.sendMessage(jid, {text:`✅ Agregado ${dia} ${m[2]}`})
         }
 
         if(texto === 'borrar todo'){
+            const admin = await esAdmin(sock, jid, senderId)
+            if(!admin){
+              await sock.sendMessage(jid, {text:'⛔ *Solo admins pueden usar!borrar todo*'})
+              return
+            }
             await supabase.from('calendario').delete().neq('id',0)
             try{ await sock.sendMessage(jid, { delete: msg.key }) }catch(e){}
-            await sock.sendMessage(jid, {text:'🗑️ Borrado todo'})
+            await sock.sendMessage(jid, {text:'🗑️ Borrado todo (por admin)'})
         }
+
         if(texto.startsWith('borrar ') && texto!== 'borrar todo'){
             const num = parseInt(texto.replace('borrar','').trim())
             if(isNaN(num)) return
