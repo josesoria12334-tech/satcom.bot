@@ -1,8 +1,7 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
-import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 try{ fs.rmSync('auth', {recursive:true, force:true}); console.log('auth borrada') }catch(e){}
-import qrcode from 'qrcode-terminal'
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
+import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient('https://ragxduxdwylyjmspzjxbv.supabase.co','sb_publishable_94IZwRIbVdQzDrI4KxTtTQ__hte1QQ0')
 const INVITE_CODE = 'IgyfxZYyujL2wbESxiDhO7'
@@ -15,12 +14,12 @@ async function startBot(){
     sock.ev.on('creds.update', saveCreds)
 
     sock.ev.on('connection.update', async (u)=>{
-        if(u.qr){ console.log('--- ESCANEA ESTE QR ---'); qrcode.generate(u.qr, {small:true}) }
+        if(u.qr){
+            console.log(`\n\n========== LINK QR GRANDE ==========\nhttps://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(u.qr)}\n====================================\n\n`)
+        }
         if(u.connection === 'open'){
             console.log('✅ BOT SEMANAL ONLINE');
             try{ const info = await sock.groupGetInviteInfo(INVITE_CODE); CHAT_PERMITIDO = info.id }catch(e){}
-            // BORRA ESTAS 2 LINEAS DESPUES DE VINCULAR
-            try{ fs.rmSync('bot.js.bak',{force:true}) }catch(e){}
         }
         if(u.connection === 'close' && u.lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut) startBot()
     })
