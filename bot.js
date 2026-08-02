@@ -5,7 +5,7 @@ const supabase = createClient('https://ragxduxdwylyjmspzjbv.supabase.co','sb_pub
 
 // CONFIGURA TUS PAISES AQUI - cambia banderas y offset si quieres
 const PAISES = [
-  { emoji: '🇲🇽', nombre: 'MX', offset: -6 }, // Juarez base
+  { emoji: '🇲🇽', nombre: 'MX', offset: -6 },
   { emoji: '🇨🇴', nombre: 'CO', offset: -5 },
   { emoji: '🇦🇷', nombre: 'AR', offset: -3 },
   { emoji: '🇪🇸', nombre: 'ES', offset: 2 },
